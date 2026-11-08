@@ -870,6 +870,7 @@ export async function executeTool(
 
   try {
     const res = await axios(config);
+    console.log(`[ifood-mcp] RESULT tool=${def.name} status=${res.status}`);
 
     // Persist fresh token if provided in response (future-proof)
     const newToken =
@@ -897,11 +898,14 @@ export async function executeTool(
       "Unknown error";
 
     if (status === 401) {
+      const providerCode = typeof (data as { code?: unknown })?.code === "string"
+        ? String((data as { code: string }).code).replace(/[^A-Za-z0-9_-]/g, "").slice(0,40) : "unspecified";
+      console.error(`[ifood-mcp] RESULT tool=${def.name} status=401 code=${providerCode}`);
       return {
         content: [
           {
             type: "text",
-            text: "Authentication failed (401). The iFood token has expired — re-authenticate via the login page or update IFOOD_ACCESS_TOKEN in .env.",
+            text: `A API do iFood recusou a sessão (401; código ${providerCode}). Autentique novamente ou importe uma sessão válida do navegador.`,
           },
         ],
         isError: true,
