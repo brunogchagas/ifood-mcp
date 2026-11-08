@@ -14,7 +14,8 @@
  */
 
 import axios from "axios";
-import { MAIN_URL } from "../index.js";
+// Identity endpoints are hosted separately from the /site-api catalog routes.
+const AUTH_URL = process.env.IFOOD_AUTH_URL || "https://marketplace.ifood.com.br";
 
 const TENANT_ID = "IFO";
 
@@ -61,7 +62,7 @@ export async function requestOtpCode(opts: {
   if (opts.phone) body.phone = opts.phone;
 
   const res = await axios.post(
-    `${MAIN_URL}/v2/identity-providers/OTP/authorization-codes`,
+    `${AUTH_URL}/v2/identity-providers/OTP/authorization-codes`,
     body,
     { headers: SHARED_HEADERS(opts.deviceId, opts.sessionId) }
   );
@@ -79,7 +80,7 @@ export async function exchangeOtpCode(opts: {
   sessionId: string;
 }): Promise<{ otpToken: string }> {
   const res = await axios.post(
-    `${MAIN_URL}/v2/identity-providers/OTP/access-tokens`,
+    `${AUTH_URL}/v2/identity-providers/OTP/access-tokens`,
     { key: opts.key, auth_code: opts.authCode },
     { headers: SHARED_HEADERS(opts.deviceId, opts.sessionId) }
   );
@@ -93,7 +94,7 @@ export async function lookupChallengeEmail(opts: {
   sessionId: string;
 }): Promise<{ email: string }> {
   const res = await axios.post(
-    `${MAIN_URL}/v1/identity-providers/OTP/challenges`,
+    `${AUTH_URL}/v1/identity-providers/OTP/challenges`,
     { token: opts.otpToken, tenant: TENANT_ID },
     { headers: SHARED_HEADERS(opts.deviceId, opts.sessionId) }
   );
@@ -112,7 +113,7 @@ export async function authenticateOtp(opts: {
   accountId: string;
 }> {
   const res = await axios.post(
-    `${MAIN_URL}/v3/identity-providers/OTP/authentications`,
+    `${AUTH_URL}/v3/identity-providers/OTP/authentications`,
     {
       tenant_id: TENANT_ID,
       token: opts.otpToken,
