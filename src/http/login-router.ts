@@ -604,6 +604,14 @@ export function createLoginRouter(provider: iFoodOAuthProvider): Router {
             <label class="field-label" for="refreshToken">Refresh Token <span style="color:var(--ink-muted)">(opcional)</span></label>
             <textarea class="field-input token" id="refreshToken" name="refreshToken" rows="3" placeholder="eyJraWQi..."></textarea>
           </div>
+          <div class="field">
+            <label class="field-label" for="deviceId">Device ID (opcional)</label>
+            <input class="field-input" id="deviceId" name="deviceId" autocomplete="off" maxlength="128"/>
+          </div>
+          <div class="field">
+            <label class="field-label" for="sessionId">Session ID (opcional)</label>
+            <input class="field-input" id="sessionId" name="sessionId" autocomplete="off" maxlength="128"/>
+          </div>
           <button class="btn" type="submit">
             <span class="spinner"></span>
             <span>Conectar</span>
@@ -615,7 +623,7 @@ export function createLoginRouter(provider: iFoodOAuthProvider): Router {
   });
 
   router.post("/login/paste", (req, res) => {
-    const { authFlow, accessToken, refreshToken } = req.body ?? {};
+    const { authFlow, accessToken, refreshToken, deviceId, sessionId } = req.body ?? {};
     if (typeof authFlow !== "string" || typeof accessToken !== "string") {
       res.status(400).send("missing fields");
       return;
@@ -624,6 +632,13 @@ export function createLoginRouter(provider: iFoodOAuthProvider): Router {
     if (!flow) {
       res.status(400).send("flow expired");
       return;
+    }
+
+    for (const id of [deviceId, sessionId]) {
+      if (id !== undefined && id !== "" && (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id))) {
+        res.status(400).send("Identificador da sessão inválido.");
+        return;
+      }
     }
 
     const token = accessToken.trim().replace(/^Bearer\s+/i, "");
@@ -656,8 +671,8 @@ export function createLoginRouter(provider: iFoodOAuthProvider): Router {
       accessToken: token,
       refreshToken: typeof refreshToken === "string" ? refreshToken.trim() : "",
       accountId: sub,
-      deviceId: flow.deviceId,
-      sessionId: flow.sessionId,
+      deviceId: deviceId || flow.deviceId,
+      sessionId: sessionId || flow.sessionId,
     });
 
     const ac = provider.codes.create({
