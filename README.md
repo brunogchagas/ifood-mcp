@@ -236,6 +236,25 @@ Once connected, ask your AI assistant:
 - **OAuth 2.1 + PKCE S256**, audience‑bound HS256 JWTs, opaque rotating refresh tokens.
 - **5‑step iFood OTP flow** wrapped in `src/http/ifood-auth.ts`: `/authorization-codes` → `/access-tokens` → `/challenges` → `/authentications`.
 
+### OAuth registration across Render restarts
+
+This deployment seals OAuth client registrations with AES-256-GCM in the client
+identifier. The encryption key is derived from `MCP_JWT_SECRET` using HKDF with a
+separate purpose label. Keep that secret stable across deployments. A changed
+key invalidates previous client registrations. No additional database or paid
+Render disk is required for these registrations.
+
+Existing `ifood_...` identifiers from the old in-memory store cannot be recovered.
+After deploying, reset the host connection's OAuth client registration once so
+that it calls `/register` again; retrying authorization with the old identifier
+will continue to fail. Do not disable client or redirect URI validation.
+
+User iFood sessions and OAuth refresh tokens still live in memory. A restart can
+therefore require signing in again; this change specifically makes the client
+registration remain usable for that sign-in. It does not fix iFood OTP challenges.
+
+Validation: `npm run build && node --test tests/oauth-clients.test.mjs`.
+
 ## Development
 
 ```bash
