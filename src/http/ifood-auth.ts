@@ -43,6 +43,29 @@ const SHARED_HEADERS = (deviceId: string, sessionId: string): Record<string, str
   "x-ifood-session-id": sessionId,
 });
 
+async function identityPost(
+  stage: string,
+  url: string,
+  body: Record<string, unknown>,
+  config: { headers: Record<string, string> },
+) {
+  try {
+    return await axios.post(url, body, { ...config, timeout: 20_000 });
+  } catch (error) {
+    if (!axios.isAxiosError(error)) throw error;
+    const data = error.response?.data;
+    // Surface only the provider's short error description, never the Axios
+    // request/config object, which contains the OTP and authentication tokens.
+    const description = data && typeof data === "object"
+      ? data.localized_message || data.message : undefined;
+    const code = data && typeof data.code === "string" && /^[A-Z0-9_-]{1,40}$/.test(data.code)
+      ? ` [${data.code}]` : "";
+    const message = typeof description === "string"
+      ? description.slice(0, 240).replace(/eyJ[A-Za-z0-9_.-]{20,}/g, "[credencial omitida]") : "";
+    throw new Error(`${stage}: HTTP ${error.response?.status ?? "indisponível"}${code}${message ? ` — ${message}` : ""}`);
+  }
+}
+
 /** Step 2 — request OTP code via the chosen channel. Returns an opaque key + timeout. */
 export async function requestOtpCode(opts: {
   channel: OtpChannel;
@@ -61,7 +84,8 @@ export async function requestOtpCode(opts: {
   if (opts.email) body.email = opts.email;
   if (opts.phone) body.phone = opts.phone;
 
-  const res = await axios.post(
+  const res = await identityPost(
+    "Enviar código",
     `${AUTH_URL}/v2/identity-providers/OTP/authorization-codes`,
     body,
     { headers: SHARED_HEADERS(opts.deviceId, opts.sessionId) }
@@ -79,7 +103,8 @@ export async function exchangeOtpCode(opts: {
   deviceId: string;
   sessionId: string;
 }): Promise<{ otpToken: string }> {
-  const res = await axios.post(
+  const res = await identityPost(
+    "Validar código",
     `${AUTH_URL}/v2/identity-providers/OTP/access-tokens`,
     { key: opts.key, auth_code: opts.authCode },
     { headers: SHARED_HEADERS(opts.deviceId, opts.sessionId) }
@@ -93,7 +118,8 @@ export async function lookupChallengeEmail(opts: {
   deviceId: string;
   sessionId: string;
 }): Promise<{ email: string }> {
-  const res = await axios.post(
+  const res = await identityPost(
+    "Identificar e-mail",
     `${AUTH_URL}/v1/identity-providers/OTP/challenges`,
     { token: opts.otpToken, tenant: TENANT_ID },
     { headers: SHARED_HEADERS(opts.deviceId, opts.sessionId) }
@@ -112,7 +138,8 @@ export async function authenticateOtp(opts: {
   refreshToken: string;
   accountId: string;
 }> {
-  const res = await axios.post(
+  const res = await identityPost(
+    "Concluir login",
     `${AUTH_URL}/v3/identity-providers/OTP/authentications`,
     {
       tenant_id: TENANT_ID,
