@@ -1,9 +1,10 @@
 /**
- * In-memory stores for the OAuth 2.1 authorization server and downstream
- * iFood API session tokens. Single-process only.
+ * Restart-safe OAuth client registrations and in-memory authorization/session
+ * stores. User sessions remain single-process and require login after restart.
  */
 
-import { randomBytes, randomUUID } from "crypto";
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, randomUUID } from "crypto";
+import { OAuthClientInformationFullSchema } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
 
@@ -13,23 +14,50 @@ function randomId(bytes = 16): string {
 
 /* ----------------------------- DCR clients -------------------------------- */
 
-export class InMemoryClientsStore implements OAuthRegisteredClientsStore {
-  private clients = new Map<string, OAuthClientInformationFull>();
+export class RestartSafeClientsStore implements OAuthRegisteredClientsStore {
+  private readonly key: Buffer;
+  private readonly prefix = "ifood_v1_";
+
+  constructor(secret: Uint8Array) {
+    if (secret.length < 32) throw new Error("OAuth client key must be at least 32 bytes");
+    this.key = Buffer.from(hkdfSync("sha256", secret,
+      "ifood-mcp", "oauth-client-registration-v1", 32));
+  }
 
   getClient(clientId: string): OAuthClientInformationFull | undefined {
-    return this.clients.get(clientId);
+    // A sealed registration survives process restarts without an ephemeral
+    // filesystem or database. Authentication secrets remain encrypted.
+    if (!clientId.startsWith(this.prefix) || clientId.length > 16384) return undefined;
+    try {
+      const encoded = clientId.slice(this.prefix.length);
+      const sealed = Buffer.from(encoded, "base64url");
+      if (sealed.length < 29 || sealed.toString("base64url") !== encoded) return undefined;
+      const decipher = createDecipheriv("aes-256-gcm", this.key, sealed.subarray(0, 12));
+      decipher.setAAD(Buffer.from(this.prefix));
+      decipher.setAuthTag(sealed.subarray(12, 28));
+      const json = Buffer.concat([decipher.update(sealed.subarray(28)), decipher.final()]);
+      return OAuthClientInformationFullSchema.parse({ ...JSON.parse(json.toString()), client_id: clientId });
+    } catch {
+      return undefined;
+    }
   }
 
   async registerClient(
     client: Omit<OAuthClientInformationFull, "client_id" | "client_id_issued_at">
   ): Promise<OAuthClientInformationFull> {
-    const full: OAuthClientInformationFull = {
-      ...client,
-      client_id: `ifood_${randomId(12)}`,
+    // The SDK may pass its own generated client_id; never embed that value.
+    const { client_id: _ignored, ...metadata } = client as OAuthClientInformationFull;
+    const record = {
+      ...metadata,
       client_id_issued_at: Math.floor(Date.now() / 1000),
     };
-    this.clients.set(full.client_id, full);
-    return full;
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", this.key, iv);
+    cipher.setAAD(Buffer.from(this.prefix));
+    const encrypted = Buffer.concat([cipher.update(JSON.stringify(record)), cipher.final()]);
+    const clientId = this.prefix + Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64url");
+    if (clientId.length > 16384) throw new Error("OAuth client metadata is too large");
+    return { ...record, client_id: clientId };
   }
 }
 
