@@ -267,11 +267,12 @@ export function createLoginRouter(provider: iFoodOAuthProvider): Router {
     }
 
     const err = typeof req.query.error === "string" ? req.query.error : "";
+    const clientName = provider.clientsStore.getClient(flow.clientId)?.client_name || "este assistente";
 
     res.send(
       page(`
         <h1>Conectar ao iFood</h1>
-        <p class="sub">Autorize <strong>${escapeHtml(flow.clientId)}</strong> a acessar sua conta iFood.</p>
+        <p class="sub">Autorize <strong>${escapeHtml(clientName)}</strong> a acessar sua conta iFood.</p>
 
         ${err ? alertBox("error", err) : ""}
 
