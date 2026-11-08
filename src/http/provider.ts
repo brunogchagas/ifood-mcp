@@ -20,7 +20,7 @@ import { InvalidGrantError, InvalidTokenError } from "@modelcontextprotocol/sdk/
 
 import {
   AuthCodeStore,
-  InMemoryClientsStore,
+  RestartSafeClientsStore,
   PendingAuthStore,
   RefreshTokenStore,
   UserTokenStore,
@@ -36,13 +36,15 @@ export type ProviderConfig = {
 };
 
 export class iFoodOAuthProvider implements OAuthServerProvider {
-  readonly clientsStore = new InMemoryClientsStore();
+  readonly clientsStore: RestartSafeClientsStore;
   readonly pending = new PendingAuthStore();
   readonly codes = new AuthCodeStore();
   readonly refreshTokens = new RefreshTokenStore();
   readonly userTokens = new UserTokenStore();
 
-  constructor(private readonly cfg: ProviderConfig) {}
+  constructor(private readonly cfg: ProviderConfig) {
+    this.clientsStore = new RestartSafeClientsStore(cfg.jwtSecret);
+  }
 
   /* --------------------------- authorize() --------------------------- */
 
