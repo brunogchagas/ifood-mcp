@@ -41,7 +41,7 @@ export interface McpToolDefinition {
 }
 
 export const MAIN_URL =
-  process.env.IFOOD_MAIN_URL || "https://www.ifood.com.br/site-api";
+  process.env.IFOOD_MAIN_URL || "https://marketplace.ifood.com.br";
 const WSLOJA_URL =
   process.env.IFOOD_WSLOJA_URL || "https://wsloja.ifood.com.br/ifood-ws-v3";
 
